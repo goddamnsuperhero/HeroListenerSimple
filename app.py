@@ -1,4 +1,4 @@
-"""BlackcatStreamBot control panel.
+"""HeroListenerSimple control panel.
 
 A small tkinter GUI to: start/stop transcription, edit settings (persisted to
 settings.json), select + test the microphone, and watch the transcript update live.
@@ -70,7 +70,7 @@ class App:
                                              on_entry=lambda e: self._entry_q.put(e))
         self._toggle_widgets = []
 
-        root.title("BlackcatStreamBot")
+        root.title("HeroListenerSimple")
         root.geometry("660x680")
         root.minsize(560, 560)
         root.columnconfigure(0, weight=1)

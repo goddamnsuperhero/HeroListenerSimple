@@ -1,4 +1,4 @@
-# BlackcatStreamBot — realtime mic → transcript log
+# HeroListenerSimple — realtime mic → transcript log
 
 A featherweight app that listens to your microphone, transcribes speech in near-realtime
 using a **remote** API (so your GPU/CPU stay free for gaming + streaming), and appends
