@@ -128,6 +128,9 @@ class App:
             f.columnconfigure(c, weight=1)
 
         self.provider_var = tk.StringVar()
+        self.model_var = tk.StringVar()
+        self.apikey_var = tk.StringVar()
+        self.show_key_var = tk.BooleanVar(value=False)
         self.language_var = tk.StringVar()
         self.vad_var = tk.StringVar()
         self.silence_var = tk.StringVar()
@@ -143,26 +146,53 @@ class App:
 
         prov = ttk.Combobox(f, textvariable=self.provider_var, state="readonly",
                             values=list(PROVIDERS.keys()), width=12)
+        prov.bind("<<ComboboxSelected>>", self._on_provider_change)
         row(0, 0, "Provider", prov,
             "Cloud service that transcribes your audio. 'groq' is cheapest & fastest; "
-            "'openai' uses your OpenAI key. The matching key must be in .env.")
-        row(0, 2, "Language", ttk.Entry(f, textvariable=self.language_var, width=10),
+            "'openai' uses your OpenAI key. Each provider has its own API key below.")
+        row(0, 2, "Model", ttk.Entry(f, textvariable=self.model_var, width=10),
+            "Transcription model. Leave blank to use the provider's default "
+            "(groq: whisper-large-v3-turbo, openai: whisper-1).")
+        # API key spans the full width; masked, with a Show toggle.
+        key_lbl = ttk.Label(f, text=f"API key  {INFO}")
+        key_lbl.grid(row=1, column=0, sticky="w", padx=(2, 6), pady=3)
+        self.apikey_entry = ttk.Entry(f, textvariable=self.apikey_var, show="•")
+        self.apikey_entry.grid(row=1, column=1, columnspan=2, sticky="ew", padx=(0, 6), pady=3)
+        show_chk = ttk.Checkbutton(f, text="Show", variable=self.show_key_var,
+                                   command=self._toggle_key_visibility)
+        show_chk.grid(row=1, column=3, sticky="w", padx=(0, 10))
+        key_tip = ("Your secret key for the selected provider. Saved to a .env file next "
+                   "to the app — never to settings.json. Get a free groq key at "
+                   "console.groq.com/keys.")
+        Tooltip(key_lbl, key_tip)
+        Tooltip(self.apikey_entry, key_tip)
+
+        row(2, 0, "Language", ttk.Entry(f, textvariable=self.language_var, width=10),
             "Spoken language as a 2-letter code (e.g. 'en'). Fixing it is faster and more "
             "accurate than auto-detect.")
-        row(1, 0, "VAD strictness (0-3)", ttk.Spinbox(f, from_=0, to=3, textvariable=self.vad_var, width=8),
+        row(2, 2, "VAD strictness (0-3)", ttk.Spinbox(f, from_=0, to=3, textvariable=self.vad_var, width=8),
             "How aggressively silence/noise is filtered out. 0 = lax (captures more, may "
             "include background noise), 3 = strict (only clear speech). 2 is a good default.")
-        row(1, 2, "Silence gap (ms)", ttk.Entry(f, textvariable=self.silence_var, width=10),
+        row(3, 0, "Silence gap (ms)", ttk.Entry(f, textvariable=self.silence_var, width=10),
             "How long you pause before the current phrase is finalized and sent. Lower = "
             "snappier, but may cut you off mid-thought. Default 600.")
-        row(2, 0, "Max utterance (s)", ttk.Entry(f, textvariable=self.maxutt_var, width=10),
+        row(3, 2, "Max utterance (s)", ttk.Entry(f, textvariable=self.maxutt_var, width=10),
             "Force-send a phrase after this many seconds of non-stop talking, so the bot "
             "never waits too long during a monologue. Default 20.")
-        row(2, 2, "Min speech (ms)", ttk.Entry(f, textvariable=self.minspeech_var, width=10),
+        row(4, 0, "Min speech (ms)", ttk.Entry(f, textvariable=self.minspeech_var, width=10),
             "Ignore blips shorter than this (coughs, clicks, keyboard). Default 250.")
 
-        self._toggle_widgets += [prov] + [w for w in f.winfo_children()
-                                          if isinstance(w, (ttk.Entry, ttk.Spinbox))]
+        self._toggle_widgets += [prov, show_chk] + [w for w in f.winfo_children()
+                                                    if isinstance(w, (ttk.Entry, ttk.Spinbox))]
+
+    def _toggle_key_visibility(self):
+        self.apikey_entry.config(show="" if self.show_key_var.get() else "•")
+
+    def _on_provider_change(self, _event=None):
+        """Show the stored key for the newly-selected provider (each has its own)."""
+        prov = self.provider_var.get().strip() or "groq"
+        key_env = PROVIDERS.get(prov, PROVIDERS["groq"])["key_env"]
+        self.apikey_var.set(os.getenv(key_env) or "")
 
     def _build_output(self):
         f = ttk.LabelFrame(self.root, text="Output", padding=8)
@@ -217,6 +247,8 @@ class App:
         idx = next((i for i, (dev, _) in enumerate(self._devices) if dev == s.input_device), 0)
         self.mic_combo.current(idx)
         self.provider_var.set(s.provider)
+        self.model_var.set(s.model)
+        self.apikey_var.set(s.api_key or "")
         self.language_var.set(s.language)
         self.vad_var.set(str(s.vad_aggressiveness))
         self.silence_var.set(str(s.silence_hangover_ms))
@@ -232,6 +264,7 @@ class App:
         try:
             s.input_device = self._selected_device()
             s.provider = self.provider_var.get().strip() or "groq"
+            s.model = self.model_var.get().strip()
             s.language = self.language_var.get().strip() or "en"
             s.vad_aggressiveness = max(0, min(3, int(self.vad_var.get())))
             s.silence_hangover_ms = int(self.silence_var.get())
@@ -242,6 +275,8 @@ class App:
                                  "VAD/silence/utterance/speech fields must be numbers.")
             return False
         s.save()
+        # Secret goes to .env (for the current provider), not settings.json.
+        s.save_api_key(self.apikey_var.get())
         self.path_var.set(s.resolved_log_dir)
         return True
 

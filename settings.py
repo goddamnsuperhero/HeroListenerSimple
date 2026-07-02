@@ -5,6 +5,7 @@ secrets never land in the settings file.
 """
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass
 from typing import Optional
@@ -19,9 +20,51 @@ else:
     APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 SETTINGS_FILE = os.path.join(APP_DIR, "settings.json")
+ENV_FILE = os.path.join(APP_DIR, ".env")
 
 # Load .env from beside the app (works both in dev and when frozen).
-load_dotenv(os.path.join(APP_DIR, ".env"))
+load_dotenv(ENV_FILE)
+
+
+def clean_api_key(value: str, key_env: str = "") -> str:
+    """Sanitize a pasted API key. Users often paste a whole .env line
+    (``GROQ_API_KEY=gsk_...``) or an auth header (``Bearer gsk_...``) into the key field;
+    strip those wrappers plus surrounding quotes/whitespace so only the raw key is stored."""
+    v = (value or "").strip().strip("\"'").strip()
+    # Drop a leading "NAME=" prefix (the configured key_env, or any env-style NAME=).
+    if key_env and v.startswith(f"{key_env}="):
+        v = v[len(key_env) + 1:]
+    else:
+        v = re.sub(r"^[A-Za-z_][A-Za-z0-9_]*\s*=\s*", "", v, count=1)
+    if v[:7].lower() == "bearer ":
+        v = v[7:]
+    return v.strip().strip("\"'").strip()
+
+
+def set_env_var(key: str, value: str, path: str = ENV_FILE) -> None:
+    """Create or update a single ``KEY=value`` line in the .env file next to the app,
+    preserving any other lines and comments, and update the live process environment so
+    the change takes effect immediately (without a restart or a second load_dotenv)."""
+    value = (value or "").strip()
+    lines: list = []
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+
+    replaced = False
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            if stripped.split("=", 1)[0].strip() == key:
+                lines[i] = f"{key}={value}"
+                replaced = True
+                break
+    if not replaced:
+        lines.append(f"{key}={value}")
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    os.environ[key] = value
 
 PROVIDERS = {
     "groq": {
@@ -111,6 +154,11 @@ class Settings:
     def save(self, path: str = SETTINGS_FILE) -> None:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(self.to_dict(), f, indent=2)
+
+    def save_api_key(self, key: str) -> None:
+        """Persist the secret for the *current* provider to .env (keyed by ``key_env``)
+        so it never lands in settings.json. Takes effect immediately."""
+        set_env_var(self.key_env, clean_api_key(key, self.key_env))
 
     @classmethod
     def load(cls, path: str = SETTINGS_FILE) -> "Settings":
