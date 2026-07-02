@@ -45,6 +45,21 @@ python tools/tail_log.py       # (another terminal) see how a bot reads the log
 python tools/list_devices.py   # list mic indices
 ```
 
+## Build a standalone .exe
+
+Package everything (Python + deps + PortAudio) into one windowed executable:
+
+```powershell
+.\build.ps1                    # or: pip install -r requirements-dev.txt; pyinstaller HeroListenerSimple.spec
+```
+
+Output: `dist\HeroListenerSimple.exe` (~26 MB, single file, no console window).
+
+**Running the .exe:** it reads/writes files *next to itself* — put a **`.env`** (with your
+API key) beside the exe. On first run it creates `settings.json` and `transcripts\` there
+too. Verify a build loaded all dependencies with `HeroListenerSimple.exe --selftest`
+(exits 0 on success).
+
 ## Log format
 
 `transcripts/transcript-YYYY-MM-DD.jsonl`, one JSON object per line:

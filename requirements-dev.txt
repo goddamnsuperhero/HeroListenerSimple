@@ -1,0 +1,3 @@
+# Tools for building the standalone executable (not needed to run from source).
+-r requirements.txt
+pyinstaller>=6.0

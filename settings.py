@@ -5,15 +5,23 @@ secrets never land in the settings file.
 """
 import json
 import os
+import sys
 from dataclasses import dataclass
 from typing import Optional
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# When frozen by PyInstaller, anchor data files (.env, settings.json, transcripts/) to the
+# folder containing the .exe — NOT the temp extraction dir — so they persist next to it.
+if getattr(sys, "frozen", False):
+    APP_DIR = os.path.dirname(sys.executable)
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_FILE = os.path.join(APP_DIR, "settings.json")
+
+# Load .env from beside the app (works both in dev and when frozen).
+load_dotenv(os.path.join(APP_DIR, ".env"))
 
 PROVIDERS = {
     "groq": {

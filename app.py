@@ -6,6 +6,7 @@ Run:  python app.py
 """
 import os
 import queue
+import sys
 import threading
 import tkinter as tk
 from datetime import datetime
@@ -16,6 +17,14 @@ import sounddevice as sd
 
 from pipeline import PipelineController, test_mic
 from settings import PROVIDERS, Settings
+
+# In windowed/no-console PyInstaller builds sys.stdout/stderr are None, so any print()
+# (audio status, transcriber diagnostics) would raise and could kill a worker thread.
+# Route them to a null sink so print() is always safe.
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
 
 INFO = "ⓘ"   # circled 'i' glyph used as the tooltip icon
 
@@ -339,6 +348,17 @@ class App:
 
 
 def main():
+    # `--selftest` builds the GUI headlessly and exits 0 — used to verify a frozen build
+    # loaded every dependency (sounddevice DLL, webrtcvad, openai, tkinter) correctly.
+    if "--selftest" in sys.argv:
+        root = tk.Tk()
+        root.withdraw()
+        App(root)
+        root.update()
+        root.destroy()
+        print("selftest OK")
+        return
+
     root = tk.Tk()
     App(root)
     root.mainloop()
