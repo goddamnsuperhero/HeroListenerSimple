@@ -1,0 +1,8 @@
+.env
+settings.json
+__pycache__/
+*.pyc
+transcripts/
+.venv/
+venv/
+.idea/
