@@ -84,6 +84,7 @@ PERSIST_FIELDS = (
     "provider", "model", "language", "input_device",
     "vad_aggressiveness", "silence_hangover_ms", "preroll_ms",
     "min_speech_ms", "max_utterance_s", "log_dir",
+    "log_filename", "max_log_bytes", "prune_on_rotate", "carryover_seconds",
 )
 
 
@@ -100,6 +101,15 @@ class Settings:
     min_speech_ms: int = 250
     max_utterance_s: float = 20.0
     log_dir: str = "transcripts"
+    # A single rolling transcript your tool can always read at the same path. When the
+    # active file grows past max_log_bytes it is moved aside (transcript-<timestamp>.jsonl)
+    # and a fresh, empty log_filename is started. Set max_log_bytes <= 0 to disable rotation.
+    log_filename: str = "transcript.jsonl"
+    max_log_bytes: int = 1_000_000
+    # When True, rotation deletes the old transcript-* archives and carries only the last
+    # `carryover_seconds` of conversation into the fresh file — one small file, no pile-up.
+    prune_on_rotate: bool = False
+    carryover_seconds: float = 60.0
 
     # --- transcription robustness ---
     max_retries: int = 3
@@ -146,6 +156,11 @@ class Settings:
         if os.path.isabs(self.log_dir):
             return self.log_dir
         return os.path.join(APP_DIR, self.log_dir)
+
+    @property
+    def resolved_log_file(self) -> str:
+        """Full path to the single rolling transcript your tool should read."""
+        return os.path.join(self.resolved_log_dir, self.log_filename)
 
     # ---- persistence ----
     def to_dict(self) -> dict:

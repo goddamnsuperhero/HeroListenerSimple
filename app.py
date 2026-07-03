@@ -201,18 +201,33 @@ class App:
 
         lbl = ttk.Label(f, text=f"Saving to  {INFO}")
         lbl.grid(row=0, column=0, sticky="w", padx=(2, 6))
-        self.path_var = tk.StringVar(value=self.settings.resolved_log_dir)
+        self.path_var = tk.StringVar(value=self.settings.resolved_log_file)
         ent = ttk.Entry(f, textvariable=self.path_var, state="readonly")
         ent.grid(row=0, column=1, sticky="ew", padx=(0, 6))
         open_btn = ttk.Button(f, text="Open folder", command=self._open_log_dir)
         open_btn.grid(row=0, column=2)
 
-        tip = ("Transcripts are written here as transcript-YYYY-MM-DD.jsonl — one JSON "
-               "line per phrase, timestamped in UTC. Change the folder via 'log_dir' in "
-               "settings.json.")
+        tip = ("One rolling transcript at this fixed path — read it here from your tool. "
+               "Each line is one JSON phrase (JSON-lines), timestamped in UTC. When it "
+               "passes ~1 MB it's moved aside to transcript-<timestamp>.jsonl and a fresh "
+               "file starts at the same path. Tune 'log_dir', 'log_filename', and "
+               "'max_log_bytes' in settings.json.")
         Tooltip(lbl, tip)
         Tooltip(ent, tip)
         Tooltip(open_btn, "Open the transcript folder in Explorer.")
+
+        self.prune_var = tk.BooleanVar(value=self.settings.prune_on_rotate)
+        prune_chk = ttk.Checkbutton(
+            f, text="Keep only recent log (delete older archives on rotate)",
+            variable=self.prune_var)
+        prune_chk.grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        Tooltip(prune_chk,
+                "When on, rotating the log deletes the old transcript-<timestamp>.jsonl "
+                "archives and carries only the last ~minute of conversation into the fresh "
+                "file — so there's just one small file, never a pile-up. When off, each "
+                "rotation is kept as an archive. Tune the kept window with "
+                "'carryover_seconds' in settings.json.")
+        self._toggle_widgets.append(prune_chk)
 
     def _build_controls(self):
         f = ttk.Frame(self.root, padding=(8, 2))
@@ -254,6 +269,7 @@ class App:
         self.silence_var.set(str(s.silence_hangover_ms))
         self.maxutt_var.set(str(s.max_utterance_s))
         self.minspeech_var.set(str(s.min_speech_ms))
+        self.prune_var.set(s.prune_on_rotate)
 
     def _selected_device(self):
         i = self.mic_combo.current()
@@ -270,6 +286,7 @@ class App:
             s.silence_hangover_ms = int(self.silence_var.get())
             s.max_utterance_s = float(self.maxutt_var.get())
             s.min_speech_ms = int(self.minspeech_var.get())
+            s.prune_on_rotate = bool(self.prune_var.get())
         except ValueError:
             messagebox.showerror("Invalid setting",
                                  "VAD/silence/utterance/speech fields must be numbers.")
@@ -277,7 +294,7 @@ class App:
         s.save()
         # Secret goes to .env (for the current provider), not settings.json.
         s.save_api_key(self.apikey_var.get())
-        self.path_var.set(s.resolved_log_dir)
+        self.path_var.set(s.resolved_log_file)
         return True
 
     # ---------------- actions ----------------
@@ -346,7 +363,7 @@ class App:
             self.toggle_btn.config(text="Stop")
             self.run_lbl.config(text="● listening", foreground="#0a0")
             self._set_enabled(False)
-            self.status_var.set(f"Listening → {self.settings.resolved_log_dir}")
+            self.status_var.set(f"Listening → {self.settings.resolved_log_file}")
 
     def _set_enabled(self, enabled: bool):
         state = "normal" if enabled else "disabled"

@@ -32,7 +32,11 @@ class PipelineController:
         frame_q: "queue.Queue[bytes]" = queue.Queue()
         utt_q: "queue.Queue" = queue.Queue()
 
-        self._log = LogWriter(self._s.resolved_log_dir)
+        self._log = LogWriter(self._s.resolved_log_dir,
+                              filename=self._s.log_filename,
+                              max_bytes=self._s.max_log_bytes,
+                              prune=self._s.prune_on_rotate,
+                              carryover_seconds=self._s.carryover_seconds)
         self._capture = AudioCapture(frame_q, self._s)
         self._vad = VadSegmenter(frame_q, utt_q, self._s)
         self._transcriber = Transcriber(utt_q, self._log, self._s, on_entry=self._on_entry)

@@ -31,7 +31,7 @@ def main() -> int:
     print(f"Provider : {s.provider}  ({s.base_url})")
     print(f"Model    : {s.resolved_model}")
     print(f"Mic      : {_describe_device(s)}")
-    print(f"Log dir  : {s.resolved_log_dir}")
+    print(f"Log file : {s.resolved_log_file}")
     print("Listening... (Ctrl+C to stop)\n")
 
     controller = PipelineController(s)
